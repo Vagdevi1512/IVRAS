@@ -1,47 +1,94 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- *  contributor license agreements.  The ASF licenses this file to You
- * under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  For additional information regarding
- * copyright in this work, please see the NOTICE file in the top level
- * directory of this distribution.
- */
+// /*
+//  * Licensed to the Apache Software Foundation (ASF) under one or more
+//  *  contributor license agreements.  The ASF licenses this file to You
+//  * under the Apache License, Version 2.0 (the "License"); you may not
+//  * use this file except in compliance with the License.
+//  * You may obtain a copy of the License at
+//  *
+//  *     http://www.apache.org/licenses/LICENSE-2.0
+//  *
+//  * Unless required by applicable law or agreed to in writing, software
+//  * distributed under the License is distributed on an "AS IS" BASIS,
+//  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//  * See the License for the specific language governing permissions and
+//  * limitations under the License.  For additional information regarding
+//  * copyright in this work, please see the NOTICE file in the top level
+//  * directory of this distribution.
+//  */
+// package org.apache.roller.weblogger.business.search.lucene;
+
+// import org.apache.commons.logging.Log;
+// import org.apache.commons.logging.LogFactory;
+
+// /**
+//  * @author aim4min
+//  */
+// public abstract class ReadFromIndexOperation extends IndexOperation {
+//     public ReadFromIndexOperation(LuceneIndexManager mgr) {
+//         super(mgr);
+//     }
+    
+//     private static Log logger = LogFactory.getFactory().getInstance(
+//             ReadFromIndexOperation.class);
+    
+//     @Override
+//     public final void run() {
+//         try {
+//             manager.getReadWriteLock().readLock().lock();
+//             doRun();
+
+//         } catch (Exception e) {
+//             logger.error("Error acquiring read lock on index", e);
+//         } finally {
+//             manager.getReadWriteLock().readLock().unlock();
+//         }
+//     }
+    
+// }
+
+
 package org.apache.roller.weblogger.business.search.lucene;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 /**
- * @author aim4min
+ * Base class for index operations that require read-only access.
+ * Ensures execution under a shared read lock.
  */
 public abstract class ReadFromIndexOperation extends IndexOperation {
-    public ReadFromIndexOperation(LuceneIndexManager mgr) {
+
+    private static final Log logger =
+            LogFactory.getFactory().getInstance(ReadFromIndexOperation.class);
+
+    protected ReadFromIndexOperation(LuceneIndexManager mgr) {
         super(mgr);
     }
-    
-    private static Log logger = LogFactory.getFactory().getInstance(
-            ReadFromIndexOperation.class);
-    
-    @Override
-    public final void run() {
-        try {
-            manager.getReadWriteLock().readLock().lock();
-            doRun();
 
+    /**
+     * Hook method for acquiring the read lock.
+     * Extracted to reduce direct coupling to lock implementation.
+     */
+    protected void acquireReadLock() {
+        manager.getReadWriteLock().readLock().lock();
+    }
+
+    /**
+     * Hook method for releasing the read lock.
+     */
+    protected void releaseReadLock() {
+        manager.getReadWriteLock().readLock().unlock();
+    }
+
+    @Override
+    public void run() {
+        try {
+            acquireReadLock();
+            doRun();
         } catch (Exception e) {
-            logger.error("Error acquiring read lock on index", e);
+            logger.error("Error during read index operation", e);
         } finally {
-            manager.getReadWriteLock().readLock().unlock();
+            releaseReadLock();
         }
     }
-    
 }
