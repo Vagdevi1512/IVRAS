@@ -37,7 +37,10 @@ import org.apache.roller.weblogger.ui.struts2.pagers.EntriesPager;
 import org.apache.roller.weblogger.ui.struts2.util.KeyValueObject;
 import org.apache.roller.weblogger.ui.struts2.util.UIAction;
 import org.apache.struts2.convention.annotation.AllowedMethods;
-
+// ADDED THESE IMPORTS:
+import org.apache.roller.weblogger.ui.viewmodel.WeblogEntriesViewModel;
+import org.apache.roller.weblogger.ui.viewmodel.WeblogEntriesViewModel.FilterCriteria;
+import org.apache.roller.weblogger.ui.viewmodel.PaginationHelper;
 
 /**
  * A list view of entries in a weblog.
@@ -49,6 +52,10 @@ public class Entries extends UIAction {
     
     // number of comments to show per page
     private static final int COUNT = 30;
+
+    // ADDED THIS FIELD:
+    // ViewModel for presentation logic
+    private WeblogEntriesViewModel viewModel = null;
     
     // bean for managing submitted data
     private EntriesBean bean = new EntriesBean();
@@ -76,56 +83,166 @@ public class Entries extends UIAction {
     }
     
     
+    // @Override
+    // public String execute() {
+        
+    //     if (log.isDebugEnabled()) {
+    //         log.debug("entries bean is ...\n"+getBean().toString());
+    //     }
+        
+    //     List<WeblogEntry> entries = null;
+    //     boolean hasMore = false;
+    //     try {
+    //         String status = getBean().getStatus();
+            
+    //         WeblogEntryManager wmgr = WebloggerFactory.getWeblogger().getWeblogEntryManager();
+    //         WeblogEntrySearchCriteria wesc = new WeblogEntrySearchCriteria();
+    //         wesc.setWeblog(getActionWeblog());
+    //         wesc.setStartDate(getBean().getStartDate());
+    //         wesc.setEndDate(getBean().getEndDate());
+    //         wesc.setCatName(getBean().getCategoryName());
+    //         wesc.setTags(getBean().getTags());
+    //         wesc.setStatus("ALL".equals(status) ? null : WeblogEntry.PubStatus.valueOf(status));
+    //         wesc.setText(getBean().getText());
+    //         wesc.setSortBy(getBean().getSortBy());
+    //         wesc.setOffset(getBean().getPage() * COUNT);
+    //         wesc.setMaxResults(COUNT + 1);
+    //         List<WeblogEntry> rawEntries = wmgr.getWeblogEntries(wesc);
+    //         entries = new ArrayList<>();
+    //         entries.addAll(rawEntries);
+    //         if (!entries.isEmpty()) {
+    //             log.debug("query found "+rawEntries.size()+" results");
+                
+    //             if(rawEntries.size() > COUNT) {
+    //                 entries.remove(entries.size()-1);
+    //                 hasMore = true;
+    //             }
+                
+    //             setFirstEntry(entries.get(0));
+    //             setLastEntry(entries.get(entries.size()-1));
+    //         }
+    //     } catch (WebloggerException ex) {
+    //         log.error("Error looking up entries", ex);
+    //         addError("Error looking up entries");
+    //     }
+        
+    //     // build entries pager
+    //     String baseUrl = buildBaseUrl();
+    //     setPager(new EntriesPager(baseUrl, getBean().getPage(), entries, hasMore));
+                
+    //     return LIST;
+    // }
     @Override
     public String execute() {
         
         if (log.isDebugEnabled()) {
-            log.debug("entries bean is ...\n"+getBean().toString());
+            log.debug("entries bean is ...\n" + getBean().toString());
         }
         
-        List<WeblogEntry> entries = null;
-        boolean hasMore = false;
         try {
-            String status = getBean().getStatus();
+            // 1. Build filter criteria from request bean
+            FilterCriteria criteria = buildFilterCriteria();
             
-            WeblogEntryManager wmgr = WebloggerFactory.getWeblogger().getWeblogEntryManager();
-            WeblogEntrySearchCriteria wesc = new WeblogEntrySearchCriteria();
-            wesc.setWeblog(getActionWeblog());
-            wesc.setStartDate(getBean().getStartDate());
-            wesc.setEndDate(getBean().getEndDate());
-            wesc.setCatName(getBean().getCategoryName());
-            wesc.setTags(getBean().getTags());
-            wesc.setStatus("ALL".equals(status) ? null : WeblogEntry.PubStatus.valueOf(status));
-            wesc.setText(getBean().getText());
-            wesc.setSortBy(getBean().getSortBy());
-            wesc.setOffset(getBean().getPage() * COUNT);
-            wesc.setMaxResults(COUNT + 1);
-            List<WeblogEntry> rawEntries = wmgr.getWeblogEntries(wesc);
-            entries = new ArrayList<>();
-            entries.addAll(rawEntries);
-            if (!entries.isEmpty()) {
-                log.debug("query found "+rawEntries.size()+" results");
-                
-                if(rawEntries.size() > COUNT) {
-                    entries.remove(entries.size()-1);
-                    hasMore = true;
-                }
-                
-                setFirstEntry(entries.get(0));
-                setLastEntry(entries.get(entries.size()-1));
+            // 2. Load entries using existing business logic
+            List<WeblogEntry> entries = loadEntries(criteria);
+            
+            // 3. Create ViewModel - delegates ALL presentation logic
+            viewModel = new WeblogEntriesViewModel(
+                getActionWeblog(),
+                entries,
+                WebloggerFactory.getWeblogger().getUrlStrategy(),
+                criteria,
+                getBean().getPage(),
+                COUNT
+            );
+            
+            // 4. Keep existing pager for backward compatibility (for now)
+            String baseUrl = buildBaseUrl();
+            boolean hasMore = viewModel.getPagination().hasNextPage();
+            setPager(new EntriesPager(baseUrl, getBean().getPage(), 
+                                    viewModel.getPageEntries(), hasMore));
+            
+            // 5. Set first/last entries from ViewModel
+            List<WeblogEntry> pageEntries = viewModel.getPageEntries();
+            if (!pageEntries.isEmpty()) {
+                setFirstEntry(pageEntries.get(0));
+                setLastEntry(pageEntries.get(pageEntries.size() - 1));
             }
+            
+            return LIST;
+            
         } catch (WebloggerException ex) {
             log.error("Error looking up entries", ex);
             addError("Error looking up entries");
+            return ERROR;
+        }
+    }
+    /**
+     * Build filter criteria from the request bean.
+     * Maps request parameters to FilterCriteria object.
+     */
+    private FilterCriteria buildFilterCriteria() {
+        FilterCriteria criteria = new FilterCriteria();
+        criteria.setCategoryName(getBean().getCategoryName());
+        criteria.setStatus(getBean().getStatus());
+        
+        // Map tags from bean
+        if (getBean().getTags() != null && !getBean().getTags().isEmpty()) {
+            criteria.setTags(getBean().getTagsAsString());
         }
         
-        // build entries pager
-        String baseUrl = buildBaseUrl();
-        setPager(new EntriesPager(baseUrl, getBean().getPage(), entries, hasMore));
-                
-        return LIST;
+        // Map search text
+        criteria.setSearchText(getBean().getText());
+        
+        // Map date range
+        criteria.setStartDate(getBean().getStartDate());
+        criteria.setEndDate(getBean().getEndDate());
+        
+        // Map sorting
+        if (getBean().getSortBy() != null) {
+            criteria.setSortBy(getBean().getSortBy().name());
+            criteria.setAscending(false); // Default to descending
+        }
+        
+        return criteria;
     }
-    
+
+    /**
+     * Load entries from business layer based on filter criteria.
+     * Simplified - no pagination logic here anymore.
+     */
+    private List<WeblogEntry> loadEntries(FilterCriteria criteria) throws WebloggerException {
+        WeblogEntryManager wmgr = WebloggerFactory.getWeblogger().getWeblogEntryManager();
+        
+        // Build search criteria
+        WeblogEntrySearchCriteria wesc = new WeblogEntrySearchCriteria();
+        wesc.setWeblog(getActionWeblog());
+        wesc.setStartDate(criteria.getStartDate());
+        wesc.setEndDate(criteria.getEndDate());
+        wesc.setCatName(criteria.getCategoryName());
+        
+        // Handle tags
+        if (criteria.getTags() != null && !criteria.getTags().isEmpty()) {
+            wesc.setTags(getBean().getTags()); // Use original tags list
+        }
+        
+        // Handle status
+        String status = criteria.getStatus();
+        wesc.setStatus("ALL".equals(status) ? null : WeblogEntry.PubStatus.valueOf(status));
+        
+        wesc.setText(criteria.getSearchText());
+        
+        // Handle sorting
+        if (criteria.getSortBy() != null) {
+            wesc.setSortBy(getBean().getSortBy()); // Use original SortBy enum
+        }
+        
+        // Important: Load ALL entries, let ViewModel handle pagination
+        wesc.setOffset(0);
+        wesc.setMaxResults(-1); // No limit - or use a reasonable limit like 1000
+        
+        return wmgr.getWeblogEntries(wesc);
+    }
     
     // use the action data to build a url representing this action, including query data
     private String buildBaseUrl() {
@@ -238,5 +355,12 @@ public class Entries extends UIAction {
     public void setPager(EntriesPager pager) {
         this.pager = pager;
     }
-    
+    /**
+     * Get the ViewModel for use in JSP.
+     * 
+     * @return WeblogEntriesViewModel containing all presentation logic
+     */
+    public WeblogEntriesViewModel getViewModel() {
+        return viewModel;
+    }
 }
