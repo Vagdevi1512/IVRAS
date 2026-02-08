@@ -802,40 +802,50 @@ public class WeblogEntry implements Serializable {
         return WebloggerFactory.getWeblogger().getWeblogEntryManager().createAnchor(this);
     }
     
-    /** Create anchor for weblog entry, based on title or text */
-    public String createAnchorBase() {
+    // /** Create anchor for weblog entry, based on title or text */
+    // public String createAnchorBase() {
         
-        // Use title (minus non-alphanumeric characters)
-        String base = null;
-        if (!StringUtils.isEmpty(getTitle())) {
-            base = Utilities.replaceNonAlphanumeric(getTitle(), ' ').trim();    
-        }
-        // If we still have no base, then try text (minus non-alphanumerics)
-        if (StringUtils.isEmpty(base) && !StringUtils.isEmpty(getText())) {
-            base = Utilities.replaceNonAlphanumeric(getText(), ' ').trim();  
-        }
+    //     // Use title (minus non-alphanumeric characters)
+    //     String base = null;
+    //     if (!StringUtils.isEmpty(getTitle())) {
+    //         base = Utilities.replaceNonAlphanumeric(getTitle(), ' ').trim();    
+    //     }
+    //     // If we still have no base, then try text (minus non-alphanumerics)
+    //     if (StringUtils.isEmpty(base) && !StringUtils.isEmpty(getText())) {
+    //         base = Utilities.replaceNonAlphanumeric(getText(), ' ').trim();  
+    //     }
         
-        if (!StringUtils.isEmpty(base)) {
+    //     if (!StringUtils.isEmpty(base)) {
             
-            // Use only the first 4 words
-            StringTokenizer toker = new StringTokenizer(base);
-            String tmp = null;
-            int count = 0;
-            while (toker.hasMoreTokens() && count < 5) {
-                String s = toker.nextToken();
-                s = s.toLowerCase();
-                tmp = (tmp == null) ? s : tmp + TITLE_SEPARATOR + s;
-                count++;
-            }
-            base = tmp;
-        }
-        // No title or text, so instead we will use the items date
-        // in YYYYMMDD format as the base anchor
-        else {
-            base = DateUtil.format8chars(getPubTime());
-        }
+    //         // Use only the first 4 words
+    //         StringTokenizer toker = new StringTokenizer(base);
+    //         String tmp = null;
+    //         int count = 0;
+    //         while (toker.hasMoreTokens() && count < 5) {
+    //             String s = toker.nextToken();
+    //             s = s.toLowerCase();
+    //             tmp = (tmp == null) ? s : tmp + TITLE_SEPARATOR + s;
+    //             count++;
+    //         }
+    //         base = tmp;
+    //     }
+    //     // No title or text, so instead we will use the items date
+    //     // in YYYYMMDD format as the base anchor
+    //     else {
+    //         base = DateUtil.format8chars(getPubTime());
+    //     }
         
-        return base;
+    //     return base;
+    // }
+    /** 
+     * Create anchor for weblog entry, based on title or text.
+     * @deprecated Use WeblogEntryPresenter.createAnchorBase() instead.
+     * This method will be removed in a future release.
+     */
+    @Deprecated
+    public String createAnchorBase() {
+        return new org.apache.roller.weblogger.ui.presenter.WeblogEntryPresenter(this)
+            .createAnchorBase();
     }
     
     /**
@@ -977,46 +987,65 @@ public class WeblogEntry implements Serializable {
      * end of the summary if it exists.  Otherwise, if the readMoreLink is
      * empty or null then we assume the caller prefers content over summary.
      */
-    public String displayContent(String readMoreLink) {
+    // public String displayContent(String readMoreLink) {
         
-        String displayContent;
+    //     String displayContent;
         
-        if(readMoreLink == null || readMoreLink.isBlank() || "nil".equals(readMoreLink)) {
+    //     if(readMoreLink == null || readMoreLink.isBlank() || "nil".equals(readMoreLink)) {
             
-            // no readMore link means permalink, so prefer text over summary
-            if(StringUtils.isNotEmpty(this.getText())) {
-                displayContent = this.getTransformedText();
-            } else {
-                displayContent = this.getTransformedSummary();
-            }
-        } else {
-            // not a permalink, so prefer summary over text
-            // include a "read more" link if needed
-            if(StringUtils.isNotEmpty(this.getSummary())) {
-                displayContent = this.getTransformedSummary();
-                if(StringUtils.isNotEmpty(this.getText())) {
-                    // add read more
-                    List<String> args = List.of(readMoreLink);
+    //         // no readMore link means permalink, so prefer text over summary
+    //         if(StringUtils.isNotEmpty(this.getText())) {
+    //             displayContent = this.getTransformedText();
+    //         } else {
+    //             displayContent = this.getTransformedSummary();
+    //         }
+    //     } else {
+    //         // not a permalink, so prefer summary over text
+    //         // include a "read more" link if needed
+    //         if(StringUtils.isNotEmpty(this.getSummary())) {
+    //             displayContent = this.getTransformedSummary();
+    //             if(StringUtils.isNotEmpty(this.getText())) {
+    //                 // add read more
+    //                 List<String> args = List.of(readMoreLink);
                     
-                    // TODO: we need a more appropriate way to get the view locale here
-                    String readMore = I18nMessages.getMessages(getWebsite().getLocaleInstance()).getString("macro.weblog.readMoreLink", args);
+    //                 // TODO: we need a more appropriate way to get the view locale here
+    //                 String readMore = I18nMessages.getMessages(getWebsite().getLocaleInstance()).getString("macro.weblog.readMoreLink", args);
                     
-                    displayContent += readMore;
-                }
-            } else {
-                displayContent = this.getTransformedText();
-            }
-        }
+    //                 displayContent += readMore;
+    //             }
+    //         } else {
+    //             displayContent = this.getTransformedText();
+    //         }
+    //     }
         
-        return HTMLSanitizer.conditionallySanitize(displayContent);
+    //     return HTMLSanitizer.conditionallySanitize(displayContent);
+    // }
+    /**
+     * Get the right transformed display content depending on the situation.
+     * @deprecated Use WeblogEntryPresenter.displayContent() instead.
+     * This method will be removed in a future release.
+     */
+    @Deprecated
+    public String displayContent(String readMoreLink) {
+        return new org.apache.roller.weblogger.ui.presenter.WeblogEntryPresenter(this)
+            .displayContent(readMoreLink);
     }
-    
     
     /**
      * Get the right transformed display content.
      */
+    // public String getDisplayContent() { 
+    //     return displayContent(null);
+    // }
+    /**
+     * Get the right transformed display content.
+     * @deprecated Use WeblogEntryPresenter.getDisplayContent() instead.
+     * This method will be removed in a future release.
+     */
+    @Deprecated
     public String getDisplayContent() { 
-        return displayContent(null);
+        return new org.apache.roller.weblogger.ui.presenter.WeblogEntryPresenter(this)
+            .getDisplayContent();
     }
 
     public Boolean getRefreshAggregates() {
