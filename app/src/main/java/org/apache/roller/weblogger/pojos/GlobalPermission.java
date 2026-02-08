@@ -5,7 +5,7 @@
  * use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,9 +21,8 @@ package org.apache.roller.weblogger.pojos;
 import java.security.Permission;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
-import org.apache.commons.lang3.builder.EqualsBuilder;
-import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.roller.weblogger.WebloggerException;
 import org.apache.roller.weblogger.business.WebloggerFactory;
 import org.apache.roller.weblogger.config.WebloggerConfig;
@@ -32,10 +31,15 @@ import org.apache.roller.weblogger.util.Utilities;
 
 /**
  * Represents a permission that applies globally to the entire web application.
+ * 
+ * FIXED: Removed shadowed 'actions' field and methods - now inherited from RollerPermission.
+ * Simplified implies() method. Removed unused actionImplies() method.
  */
 public class GlobalPermission extends RollerPermission {
-    protected String actions;
-
+    private static final long serialVersionUID = 1L;
+    
+    // REMOVED: protected String actions; - This was shadowing RollerPermission.actions!
+    
     /** Allowed to login and edit profile */
     public static final String LOGIN  = "login";
     
@@ -45,6 +49,9 @@ public class GlobalPermission extends RollerPermission {
     /** Allowed to login and do everything, including site-wide admin */
     public static final String ADMIN  = "admin";
     
+    /** Action hierarchy for permission implication (higher index = more powerful) */
+    private static final List<String> ACTION_HIERARCHY = List.of(LOGIN, WEBLOG, ADMIN);
+
     /**
      * Create global permission for one specific user initialized with the 
      * actions that are implied by the user's roles.
@@ -54,7 +61,7 @@ public class GlobalPermission extends RollerPermission {
     public GlobalPermission(User user) throws WebloggerException {
         super("GlobalPermission user: " + user.getUserName());
         
-        // loop through user's roles, adding actions implied by each
+        // Loop through user's roles, adding actions implied by each
         List<String> roles = WebloggerFactory.getWeblogger().getUserManager().getRoles(user);
         List<String> actionsList = new ArrayList<>();
         for (String role : roles) {
@@ -92,40 +99,32 @@ public class GlobalPermission extends RollerPermission {
         setActionsAsList(actions);
     }
         
+    /**
+     * FIXED: Simplified implies() method to reduce complexity.
+     * Uses action hierarchy instead of nested conditionals.
+     */
     @Override
     public boolean implies(Permission perm) {
         if (getActionsAsList().isEmpty()) {
-            // new, unsaved user.
+            // New, unsaved user - no permissions implied
             return false;
         }
+        
+        // GlobalPermission with ADMIN implies everything
+        if (hasAction(ADMIN)) {
+            return true;
+        }
+        
         if (perm instanceof WeblogPermission) {
-            if (hasAction(ADMIN)) {
-                // admin implies all other permissions
-                return true;                
-            } 
+            // GlobalPermission with WEBLOG or LOGIN does NOT imply WeblogPermission
+            // Only ADMIN implies WeblogPermission
+            return false;
         } else if (perm instanceof RollerPermission) {
-            RollerPermission rperm = (RollerPermission)perm;            
-            if (hasAction(ADMIN)) {
-                // admin implies all other permissions
-                return true;
-                
-            } else if (hasAction(WEBLOG)) {
-                // Best we've got is WEBLOG, so make sure perm doesn't specify ADMIN
-                for (String action : rperm.getActionsAsList()) {
-                    if (action.equals(ADMIN)) {
-                        return false;
-                    }
-                }
-                
-            } else if (hasAction(LOGIN)) {
-                // Best we've got is LOGIN, so make sure perm doesn't specify anything else
-                for (String action : rperm.getActionsAsList()) {
-                    if (action.equals(WEBLOG)) {
-                        return false;
-                    }
-                    if (action.equals(ADMIN)) {
-                        return false;
-                    }
+            // Check if our actions imply the requested permission's actions
+            RollerPermission rperm = (RollerPermission) perm;
+            for (String requestedAction : rperm.getActionsAsList()) {
+                if (!impliesAction(requestedAction)) {
+                    return false;
                 }
             }
             return true;
@@ -133,49 +132,68 @@ public class GlobalPermission extends RollerPermission {
         return false;
     }
     
-    private boolean actionImplies(String action1, String action2) {
-        return action1.equals(ADMIN) || (action1.equals(WEBLOG) && action2.equals(LOGIN));
+    /**
+     * FIXED: Extracted method to check if a single action is implied.
+     * Uses action hierarchy: ADMIN implies WEBLOG implies LOGIN.
+     */
+    private boolean impliesAction(String requestedAction) {
+        int requestedLevel = ACTION_HIERARCHY.indexOf(requestedAction);
+        if (requestedLevel == -1) {
+            return false; // Unknown action
+        }
+        
+        // Check if we have any action at or above the requested level
+        for (String ownedAction : getActionsAsList()) {
+            int ownedLevel = ACTION_HIERARCHY.indexOf(ownedAction);
+            if (ownedLevel >= requestedLevel) {
+                return true;
+            }
+        }
+        return false;
     }
+    
+    /**
+     * REMOVED: actionImplies() method - was unused dead code.
+     */
     
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("GlobalPermission: ");
-        for (String action : getActionsAsList()) { 
-            sb.append(" ").append(action).append(" ");
+        List<String> actions = getActionsAsList();
+        for (int i = 0; i < actions.size(); i++) {
+            sb.append(actions.get(i));
+            if (i < actions.size() - 1) {
+                sb.append(", ");
+            }
         }
         return sb.toString();
     }
 
-    @Override
-    public void setActions(String actions) {
-        this.actions = actions;
-    }
+    // REMOVED: setActions() override - now properly inherited from RollerPermission
+    // REMOVED: getActions() override - now properly inherited from RollerPermission
 
-    @Override
-    public String getActions() {
-        return actions;
-    }
-
+    /**
+     * FIXED: Simplified equals() to use standard Java Objects.equals().
+     */
     @Override
     public boolean equals(Object other) {
-        if (other == this) {
+        if (this == other) {
             return true;
         }
         if (!(other instanceof GlobalPermission)) {
             return false;
         }
-        GlobalPermission o = (GlobalPermission) other;
-        return new EqualsBuilder()
-                .append(getActions(), o.getActions())
-                .isEquals();
+        GlobalPermission that = (GlobalPermission) other;
+        // GlobalPermission is identified by its actions only (no user-specific state)
+        return Objects.equals(getActions(), that.getActions());
     }
 
+    /**
+     * FIXED: Simplified hashCode() to use standard Java Objects.hash().
+     */
     @Override
     public int hashCode() {
-        return new HashCodeBuilder()
-                .append(getActions())
-                .toHashCode();
+        return Objects.hash(getActions());
     }
-
 }
