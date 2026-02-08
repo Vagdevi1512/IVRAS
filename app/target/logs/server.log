@@ -1,3 +1,0 @@
-INFO  2026-02-07 22:52:41 [main] org.eclipse.persistence.logging.slf4j.SLF4JLogger$LogInfo - EclipseLink, version: Eclipse Persistence Services - 4.0.5.v202412231137-a96b873527f305f932543045c8679bb1de8d3a43
-INFO  2026-02-07 22:52:42 [main] org.apache.lucene.store.MemorySegmentIndexInputProvider - Using MemorySegmentIndexInput and native madvise support with Java 21 or later; to disable start with -Dorg.apache.lucene.store.MMapDirectory.enableMemorySegments=false
-WARN  2026-02-07 22:52:42 [main] org.apache.lucene.internal.vectorization.VectorizationProvider - You are running with Java 23 or later. To make full use of the Vector API, please update Apache Lucene.
