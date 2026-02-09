@@ -34,6 +34,7 @@ import org.apache.roller.weblogger.ui.core.RollerContext;
 import org.apache.roller.weblogger.ui.rendering.Renderer;
 import org.apache.roller.weblogger.ui.rendering.RendererManager;
 import org.apache.roller.weblogger.ui.rendering.model.ModelLoader;
+import org.apache.roller.weblogger.ui.rendering.util.PreviewWeblogDTO;
 import org.apache.roller.weblogger.ui.rendering.util.WeblogPreviewRequest;
 import org.apache.roller.weblogger.util.cache.CachedContent;
 
@@ -113,7 +114,11 @@ public class PreviewServlet extends HttpServlet {
 				: MobileDeviceRepository.DeviceType.mobile;
         }
 
-		Weblog tmpWebsite = weblog;
+		// Use PreviewWeblogDTO to abstract weblog object creation for preview rendering.
+		// This refactoring removes the layer violation where UI servlet directly
+		// created and manipulated POJO objects.
+		PreviewWeblogDTO previewWeblogDTO = new PreviewWeblogDTO(weblog);
+        Weblog tmpWebsite = weblog;
         
         if (previewRequest.getThemeName() != null) {
             // only create temporary weblog object if theme name was specified
@@ -123,15 +128,16 @@ public class PreviewServlet extends HttpServlet {
             log.debug("preview theme = "+previewRequest.getThemeName());
             Theme previewTheme = previewRequest.getTheme();
 
-            // construct a temporary Website object for this request
-            // and set the EditorTheme to our previewTheme
-            tmpWebsite = new Weblog();
-            tmpWebsite.setData(weblog);
+            // Set the theme to preview through the DTO instead of manipulating POJO directly.
+            // The DTO encapsulates the POJO creation logic.
             if(previewTheme != null && previewTheme.isEnabled()) {
-                tmpWebsite.setEditorTheme(previewTheme.getId());
+                previewWeblogDTO.setEditorThemeId(previewTheme.getId());
             } else if(WeblogTheme.CUSTOM.equals(previewRequest.getThemeName())) {
-                tmpWebsite.setEditorTheme(WeblogTheme.CUSTOM);
+                previewWeblogDTO.setEditorThemeId(WeblogTheme.CUSTOM);
             }
+            
+            // Build the preview weblog using DTO (contains the temporary object creation logic)
+            tmpWebsite = previewWeblogDTO.buildPreviewWeblog();
 
             // we've got to set the weblog in our previewRequest because that's
             // the object that gets referenced during rendering operations

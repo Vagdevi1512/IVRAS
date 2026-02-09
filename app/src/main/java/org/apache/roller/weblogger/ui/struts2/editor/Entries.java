@@ -83,45 +83,34 @@ public class Entries extends UIAction {
             log.debug("entries bean is ...\n"+getBean().toString());
         }
         
-        List<WeblogEntry> entries = null;
-        boolean hasMore = false;
         try {
-            String status = getBean().getStatus();
-            
-            WeblogEntryManager wmgr = WebloggerFactory.getWeblogger().getWeblogEntryManager();
-            WeblogEntrySearchCriteria wesc = new WeblogEntrySearchCriteria();
-            wesc.setWeblog(getActionWeblog());
-            wesc.setStartDate(getBean().getStartDate());
-            wesc.setEndDate(getBean().getEndDate());
-            wesc.setCatName(getBean().getCategoryName());
-            wesc.setTags(getBean().getTags());
-            wesc.setStatus("ALL".equals(status) ? null : WeblogEntry.PubStatus.valueOf(status));
-            wesc.setText(getBean().getText());
-            wesc.setSortBy(getBean().getSortBy());
-            wesc.setOffset(getBean().getPage() * COUNT);
-            wesc.setMaxResults(COUNT + 1);
-            List<WeblogEntry> rawEntries = wmgr.getWeblogEntries(wesc);
-            entries = new ArrayList<>();
-            entries.addAll(rawEntries);
+            // Use DTO to encapsulate entry search and filtering logic
+            EntriesManagementDTO entriesMgmt = new EntriesManagementDTO(getActionWeblog());
+            entriesMgmt.setStatus(getBean().getStatus());
+            entriesMgmt.setCategoryName(getBean().getCategoryName());
+            entriesMgmt.setTags(getBean().getTags());
+            entriesMgmt.setText(getBean().getText());
+            entriesMgmt.setStartDate(getBean().getStartDate());
+            entriesMgmt.setEndDate(getBean().getEndDate());
+            entriesMgmt.setSortBy(getBean().getSortBy());
+            entriesMgmt.setPageNum(getBean().getPage());
+
+            // Search entries via DTO (abstracts all business manager access)
+            entriesMgmt.searchEntries();
+
+            List<WeblogEntry> entries = entriesMgmt.getEntries();
             if (!entries.isEmpty()) {
-                log.debug("query found "+rawEntries.size()+" results");
-                
-                if(rawEntries.size() > COUNT) {
-                    entries.remove(entries.size()-1);
-                    hasMore = true;
-                }
-                
                 setFirstEntry(entries.get(0));
                 setLastEntry(entries.get(entries.size()-1));
             }
+
+            // build entries pager
+            String baseUrl = buildBaseUrl();
+            setPager(new EntriesPager(baseUrl, getBean().getPage(), entries, entriesMgmt.hasMore()));
         } catch (WebloggerException ex) {
             log.error("Error looking up entries", ex);
             addError("Error looking up entries");
         }
-        
-        // build entries pager
-        String baseUrl = buildBaseUrl();
-        setPager(new EntriesPager(baseUrl, getBean().getPage(), entries, hasMore));
                 
         return LIST;
     }
@@ -163,25 +152,9 @@ public class Entries extends UIAction {
      * Get the list of all categories for the action weblog, not including root.
      */
     public List<WeblogCategory> getCategories() {
-        // make list of categories with first option being being a transient
-        // category just meant to represent the default option of any category
-        List<WeblogCategory> cats = new ArrayList<>();
-        
-        WeblogCategory tmpCat = new WeblogCategory();
-        tmpCat.setName("Any");
-        cats.add(tmpCat);
-        
-        List<WeblogCategory> weblogCats = Collections.emptyList();
-        try {
-            WeblogEntryManager wmgr = WebloggerFactory.getWeblogger().getWeblogEntryManager();
-            weblogCats = wmgr.getWeblogCategories(getActionWeblog());
-        } catch (WebloggerException ex) {
-            log.error("Error getting category list for weblog - " + getWeblog(), ex);
-        }
-        
-        cats.addAll(weblogCats);
-        
-        return cats;
+        // Use DTO to load categories (abstracts business manager access)
+        EntriesManagementDTO entriesMgmt = new EntriesManagementDTO(getActionWeblog());
+        return entriesMgmt.loadCategories();
     }
     
     

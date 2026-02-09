@@ -22,9 +22,6 @@ import java.util.Collections;
 import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.roller.weblogger.WebloggerException;
-import org.apache.roller.weblogger.business.WebloggerFactory;
-import org.apache.roller.weblogger.business.WeblogEntryManager;
 import org.apache.roller.weblogger.pojos.WeblogCategory;
 import org.apache.roller.weblogger.pojos.WeblogPermission;
 import org.apache.roller.weblogger.ui.struts2.util.UIAction;
@@ -55,9 +52,14 @@ public class Categories extends UIAction {
 	@Override
 	public String execute() {
 		try {
-            WeblogEntryManager wmgr = WebloggerFactory.getWeblogger().getWeblogEntryManager();
-			allCategories = wmgr.getWeblogCategories(getActionWeblog());
-		} catch (WebloggerException ex) {
+            // Use DTO to load categories (abstracts all business manager access)
+            CategoriesListDTO categoriesLoader = new CategoriesListDTO(getActionWeblog());
+            if (categoriesLoader.loadAllCategories()) {
+                allCategories = categoriesLoader.getAllCategories();
+            } else {
+                addError("Error building categories list");
+            }
+		} catch (Exception ex) {
 			log.error("Error building categories list", ex);
 			addError("Error building categories list");
 		}

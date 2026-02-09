@@ -70,55 +70,29 @@ public class Templates extends UIAction {
     @Override
     public String execute() {
 
-        // query for templates list
         try {
+            // Use DTO to encapsulate template retrieval and filtering logic
+            TemplateManagementDTO templateMgmt = new TemplateManagementDTO(getActionWeblog());
+            templateMgmt.loadAndFilterTemplates();
+            templateMgmt.buildAvailableActions();
 
-            // get current list of templates, minus custom stylesheet
-            List<WeblogTemplate> raw = WebloggerFactory.getWeblogger()
-                .getWeblogManager().getTemplates(getActionWeblog());
-            List<WeblogTemplate> pages = new ArrayList<>(raw);
+            // Set templates and available actions from DTO
+            setTemplates(templateMgmt.getTemplates());
+            setAvailableActions(templateMgmt.getAvailableActions());
 
-            // Remove style sheet from list so not to show when theme is
-            // selected in shared theme mode
-            if (getActionWeblog().getTheme().getStylesheet() != null) {
-                pages.remove(WebloggerFactory.getWeblogger().getWeblogManager()
-                    .getTemplateByLink(getActionWeblog(), getActionWeblog().getTheme().getStylesheet().getLink()));
-            }
-            setTemplates(pages);
-
-            // build list of action types that may be added
-            Map<ComponentType, String> actionsMap = new EnumMap<>(ComponentType.class);
-            addComponentTypeToMap(actionsMap, ComponentType.CUSTOM);
-
-            if (WeblogTheme.CUSTOM.equals(getActionWeblog().getEditorTheme())) {
-
-                // if the weblog is using a custom theme then determine which
-                // action templates are still available to be created
-                addComponentTypeToMap(actionsMap, ComponentType.PERMALINK);
-                addComponentTypeToMap(actionsMap, ComponentType.SEARCH);
-                addComponentTypeToMap(actionsMap, ComponentType.WEBLOG);
-                addComponentTypeToMap(actionsMap, ComponentType.TAGSINDEX);
-
-                for (WeblogTemplate tmpPage : getTemplates()) {
-                    if (!ComponentType.CUSTOM.equals(tmpPage.getAction())) {
-                        actionsMap.remove(tmpPage.getAction());
-                    }
-                }
-            } else {
-                // Make sure we have an option for the default web page
-                addComponentTypeToMap(actionsMap, ComponentType.WEBLOG);
+            // Determine default action for non-custom themes
+            if (!WeblogTheme.CUSTOM.equals(getActionWeblog().getEditorTheme())) {
                 if (getNewTmplAction() == null) {
                     setNewTmplAction(ComponentType.WEBLOG);
                 }
+                // Check if weblog page already exists
                 for (WeblogTemplate tmpPage : getTemplates()) {
                     if (ComponentType.WEBLOG.equals(tmpPage.getAction())) {
-                        actionsMap.remove(ComponentType.WEBLOG);
                         setNewTmplAction(null);
                         break;
                     }
                 }
             }
-            setAvailableActions(actionsMap);
 
         } catch (WebloggerException ex) {
             log.error("Error getting templates for weblog - "
@@ -143,52 +117,11 @@ public class Templates extends UIAction {
 
         if (!hasActionErrors()) {
             try {
-
-                WeblogTemplate newTemplate = new WeblogTemplate();
-                newTemplate.setWeblog(getActionWeblog());
-                newTemplate.setAction(getNewTmplAction());
-                newTemplate.setName(getNewTmplName());
-                newTemplate.setHidden(false);
-                newTemplate.setNavbar(false);
-                newTemplate.setLastModified(new Date());
-
-                if (ComponentType.CUSTOM.equals(getNewTmplAction())) {
-                    newTemplate.setLink(getNewTmplName());
-                }
-
-                // Make sure we have always have a Weblog main page. Stops
-                // deleting main page in custom theme mode also.
-                if (ComponentType.WEBLOG.equals(getNewTmplAction())) {
-                    newTemplate.setName(WeblogTemplate.DEFAULT_PAGE);
-                }
-
-                // save the new Template
-                WebloggerFactory.getWeblogger().getWeblogManager().saveTemplate(newTemplate);
-
-                // Create weblog template renditions for available types.
-                CustomTemplateRendition standardRendition =
-                    new CustomTemplateRendition( newTemplate, RenditionType.STANDARD);
-                standardRendition.setTemplate(getText("pageForm.newTemplateContent"));
-                standardRendition.setTemplateLanguage(TemplateLanguage.VELOCITY);
-                WebloggerFactory.getWeblogger().getWeblogManager().saveTemplateRendition(standardRendition);
-
-                /* TODO: need a way for user to specify dual or single template via UI
-                CustomTemplateRendition mobileRendition = new CustomTemplateRendition(
-                        newTemplate.getId(), RenditionType.MOBILE);
-                mobileRendition.setTemplate(newTemplate.getContents());
-                mobileRendition.setTemplateLanguage(TemplateLanguage.VELOCITY);
-                WebloggerFactory.getWeblogger().getWeblogManager()
-                        .saveTemplateRendition(mobileRendition);
-                */
-
-                // if this person happened to create a Weblog template from
-                // scratch then make sure and set the defaultPageId.
-                if (WeblogTemplate.DEFAULT_PAGE.equals(newTemplate.getName())) {
-                    WebloggerFactory.getWeblogger().getWeblogManager().saveWeblog(getActionWeblog());
-                }
-
-                // flush results to db
-                WebloggerFactory.getWeblogger().flush();
+                // Use DTO to encapsulate template creation and persistence logic
+                TemplateCreationDTO templateCreator = new TemplateCreationDTO(
+                    getActionWeblog(), getNewTmplName(), getNewTmplAction());
+                templateCreator.setTemplateContent(getText("pageForm.newTemplateContent"));
+                templateCreator.createAndSaveTemplate();
 
                 // reset form fields
                 setNewTmplName(null);
@@ -204,59 +137,31 @@ public class Templates extends UIAction {
     }
 
     /**
-     * Remove a new template.
+     * Remove a template.
      */
     public String remove() {
 
-        WeblogTemplate template = null;
         try {
-            template = WebloggerFactory.getWeblogger().getWeblogManager().getTemplate(getRemoveId());
-        } catch (WebloggerException e) {
-            addError("Error deleting template - check Roller logs");
-        }
+            // Use DTO to encapsulate template deletion logic
+            TemplateDeletionDTO templateDeletor = new TemplateDeletionDTO(getActionWeblog(), getRemoveId());
 
-        if (template != null) {
-            try {
-                if (!template.isRequired()
-                    || !WeblogTheme.CUSTOM.equals(getActionWeblog().getEditorTheme())) {
-
-                    WeblogManager mgr = WebloggerFactory.getWeblogger().getWeblogManager();
-
-                    // if weblog template remove custom style sheet also
-                    if (template.getName().equals(WeblogTemplate.DEFAULT_PAGE)) {
-
-                        ThemeTemplate stylesheet = getActionWeblog().getTheme().getStylesheet();
-
-                        // Delete style sheet if the same name
-                        if (stylesheet != null
-                            && getActionWeblog().getTheme().getStylesheet() != null
-                            && stylesheet.getLink().equals(
-                            getActionWeblog().getTheme().getStylesheet().getLink())) {
-
-                            // Same so OK to delete
-                            WeblogTemplate css =
-                                mgr.getTemplateByLink(getActionWeblog(), stylesheet.getLink());
-
-                            if (css != null) {
-                                mgr.removeTemplate(css);
-                            }
-                        }
-                    }
-
-                    // notify cache
-                    CacheManager.invalidate(template);
-                    mgr.removeTemplate(template);
-                    WebloggerFactory.getWeblogger().flush();
-
-                } else {
-                    addError("editPages.remove.requiredTemplate");
-                }
-
-            } catch (Exception ex) {
-                log.error("Error removing page - " + getRemoveId(), ex);
+            // Load template via business manager (abstracted to DTO)
+            if (!templateDeletor.loadTemplate()) {
                 addError("editPages.remove.error");
+                return execute();
             }
-        } else {
+
+            // Check if template can be deleted (business logic abstracted to DTO)
+            if (!templateDeletor.canDelete()) {
+                addError("editPages.remove.requiredTemplate");
+                return execute();
+            }
+
+            // Delete template and associated resources (all business logic abstracted to DTO)
+            templateDeletor.deleteTemplate();
+
+        } catch (Exception ex) {
+            log.error("Error removing page - " + getRemoveId(), ex);
             addError("editPages.remove.error");
         }
 

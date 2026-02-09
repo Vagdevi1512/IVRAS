@@ -45,9 +45,14 @@ public class DerbyLifeCycle implements LifeCycle.Listener {
             setupDerby();
             NetworkServerControl server = new NetworkServerControl();
             server.start(new PrintWriter(System.out));
-            try {Thread.sleep(2000);} catch (Exception ignored) {}
+            // Increased sleep time to ensure Derby server is fully ready before app connects
+            // Original: 2000ms was insufficient for consistent test execution
+            // New: 5000ms ensures Derby network server is fully initialized
+            try {Thread.sleep(5000);} catch (Exception ignored) {}
+            log.info("Derby started successfully on port 4224");
         } catch (Exception e) {
             log.error("Error starting Derby", e);
+            throw new RuntimeException("Failed to start Derby network server", e);
         }
     }
 
@@ -61,6 +66,7 @@ public class DerbyLifeCycle implements LifeCycle.Listener {
             NetworkServerControl server = new NetworkServerControl();
             server.shutdown();
             try {Thread.sleep(2000);} catch (Exception ignored) {}
+            log.info("Derby stopped successfully");
         } catch (Exception e) {
             log.error("Error stopping Derby", e);
         }

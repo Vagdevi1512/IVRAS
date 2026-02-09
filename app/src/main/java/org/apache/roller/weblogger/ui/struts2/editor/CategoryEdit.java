@@ -25,12 +25,9 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.roller.weblogger.WebloggerException;
-import org.apache.roller.weblogger.business.WebloggerFactory;
-import org.apache.roller.weblogger.business.WeblogEntryManager;
 import org.apache.roller.weblogger.pojos.WeblogCategory;
 import org.apache.roller.weblogger.pojos.WeblogPermission;
 import org.apache.roller.weblogger.ui.struts2.util.UIAction;
-import org.apache.roller.weblogger.util.cache.CacheManager;
 import org.apache.struts2.interceptor.validation.SkipValidation;
 
 
@@ -65,20 +62,22 @@ public class CategoryEdit extends UIAction {
     
     @Override
     public void myPrepare() {
-
-        if ( isAdd() ) {
-            // Create and initialize new, not-yet-saved category
-            category = new WeblogCategory();
-            category.setWeblog(getActionWeblog());
-
+        // Use DTO to encapsulate category loading/creation (abstracts business manager access)
+        CategoryManagementDTO categoryMgmt;
+        
+        if (isAdd()) {
+            // Create new category via DTO
+            categoryMgmt = new CategoryManagementDTO(getActionWeblog());
         } else {
-            try {
-                WeblogEntryManager wmgr = WebloggerFactory.getWeblogger().getWeblogEntryManager();
-                category = wmgr.getWeblogCategory(getBean().getId());
-            } catch (WebloggerException ex) {
-                log.error("Error looking up category", ex);
+            // Load existing category via DTO (abstracts business manager access)
+            categoryMgmt = new CategoryManagementDTO(getActionWeblog(), getBean().getId());
+            if (!categoryMgmt.loadCategory()) {
+                log.error("Error looking up category with ID: " + getBean().getId());
             }
         }
+        
+        // Get category POJO from DTO
+        category = categoryMgmt.getCategory();
     }
     
     
@@ -107,27 +106,22 @@ public class CategoryEdit extends UIAction {
         
         if(!hasActionErrors()) {
             try {
-
                 // copy updated attributes
                 getBean().copyTo(category);
 
-                // save changes
-                WeblogEntryManager wmgr = WebloggerFactory.getWeblogger().getWeblogEntryManager();
-                if (isAdd()) {
-                    getActionWeblog().addCategory(category);
-                    category.calculatePosition();
+                // Use DTO to save category (abstracts all business manager access and cache invalidation)
+                CategoryManagementDTO categoryMgmt = new CategoryManagementDTO(getActionWeblog());
+                categoryMgmt.setCategory(category);
+                
+                if (categoryMgmt.saveCategory()) {
+                    addMessage(isAdd()? "categoryForm.created"
+                            : "categoryForm.changesSaved",
+                            category.getName());
+                    return SUCCESS;
+                } else {
+                    addError("generic.error.check.logs");
+                    return INPUT;
                 }
-                wmgr.saveWeblogCategory(category);
-                WebloggerFactory.getWeblogger().flush();
-
-                // notify caches
-                CacheManager.invalidate(getActionWeblog());
-
-                addMessage(isAdd()? "categoryForm.created"
-                        : "categoryForm.changesSaved",
-                        category.getName());
-
-                return SUCCESS;
             } catch(Exception ex) {
                 log.error("Error saving category", ex);
                 addError("generic.error.check.logs");
@@ -140,13 +134,13 @@ public class CategoryEdit extends UIAction {
     public void myValidate() {
         if (bean.getName() == null || !bean.getName().equals(StringEscapeUtils.escapeHtml4(bean.getName()))) {
             addError("categoryForm.error.invalidName");
-        } else if ( isAdd() ) {
-            if ( getActionWeblog().hasCategory( bean.getName() ) ) {
-                addError("categoryForm.error.duplicateName", bean.getName());
-            }
         } else {
-            WeblogCategory wc = getActionWeblog().getWeblogCategory(bean.getName());
-            if ( wc != null && !wc.getId().equals( bean.getId() )) {
+            // Use DTO to check for duplicate category names (abstracts POJO and weblog access)
+            CategoryManagementDTO categoryMgmt = new CategoryManagementDTO(getActionWeblog());
+            
+            // For new categories or when name changed on existing category
+            String categoryIdToExclude = isAdd() ? null : getBean().getId();
+            if (categoryMgmt.categoryNameExists(bean.getName(), categoryIdToExclude)) {
                 addError("categoryForm.error.duplicateName", bean.getName());
             }
         }

@@ -193,12 +193,6 @@ public final class EntryEdit extends UIAction {
     private String save() {
         if (!hasActionErrors()) {
             try {
-                WeblogEntryManager weblogEntryManager = WebloggerFactory.getWeblogger()
-                        .getWeblogEntryManager();
-
-                IndexManager indexMgr = WebloggerFactory.getWeblogger()
-                        .getIndexManager();
-
                 WeblogEntry weblogEntry = getEntry();
 
                 // set updatetime & pubtime
@@ -223,6 +217,7 @@ public final class EntryEdit extends UIAction {
                     weblogEntry.setPinnedToMain(getBean().getPinnedToMain());
                 }
 
+                // Handle MediaCast attributes
                 if (!StringUtils.isEmpty(getBean().getEnclosureURL())) {
                     try {
                         // Fetch MediaCast resource
@@ -243,8 +238,9 @@ public final class EntryEdit extends UIAction {
                     }
                 } else if ("entryEdit".equals(actionName)) {
                     try {
-                        // if MediaCast string is empty, clean out MediaCast
-                        // attributes
+                        // if MediaCast string is empty, clean out MediaCast attributes
+                        WeblogEntryManager weblogEntryManager = WebloggerFactory.getWeblogger()
+                                .getWeblogEntryManager();
                         weblogEntryManager.removeWeblogEntryAttribute(
                                 "att_mediacast_url", weblogEntry);
                         weblogEntryManager.removeWeblogEntryAttribute(
@@ -264,49 +260,30 @@ public final class EntryEdit extends UIAction {
                     log.debug("pubtime = " + weblogEntry.getPubTime());
                 }
 
-                log.debug("Saving entry");
-                weblogEntryManager.saveWeblogEntry(weblogEntry);
-                WebloggerFactory.getWeblogger().flush();
-
-                // notify search of the new entry
-                if (weblogEntry.isPublished()) {
-                    indexMgr.addEntryReIndexOperation(entry);
-                } else if ("entryEdit".equals(actionName)) {
-                    indexMgr.removeEntryIndexOperation(entry);
-                }
-
-                // notify caches
-                CacheManager.invalidate(weblogEntry);
-
-                // Queue applicable pings for this update.
-                if (weblogEntry.isPublished()) {
-                    WebloggerFactory.getWeblogger().getAutopingManager()
-                            .queueApplicableAutoPings(weblogEntry);
-                }
-
-                if (weblogEntry.isPending() && MailUtil.isMailConfigured()) {
-                    MailUtil.sendPendingEntryNotice(weblogEntry);
-                }
-                if ("entryEdit".equals(actionName)) {
-                    addStatusMessage(getEntry().getStatus());
-                    // continue in entryEdit mode
-                    return INPUT;
+                log.debug("Saving entry via DTO");
+                // Use DTO to encapsulate all entry save operations (abstracts business manager access)
+                EntrySaveDTO entrySaveDTO = new EntrySaveDTO(getActionWeblog(), weblogEntry);
+                if (entrySaveDTO.saveEntry()) {
+                    if ("entryEdit".equals(actionName)) {
+                        addStatusMessage(getEntry().getStatus());
+                        // continue in entryEdit mode
+                        return INPUT;
+                    } else {
+                        // now that entry is saved we have an id value for it
+                        // store it back in bean for use in next action
+                        getBean().setId(weblogEntry.getId());
+                        // flip over to entryEdit mode, as defined in struts.xml
+                        return SUCCESS;
+                    }
                 } else {
-                    // now that entry is saved we have an id value for it
-                    // store it back in bean for use in next action
-                    getBean().setId(weblogEntry.getId());
-                    // flip over to entryEdit mode, as defined in struts.xml
-                    return SUCCESS;
+                    addError("Error saving entry");
+                    return INPUT;
                 }
-
-            } catch (Exception e) {
-                log.error("Error saving new entry", e);
-                addError("generic.error.check.logs");
+            } catch (Exception ex) {
+                log.error("Error saving entry", ex);
+                addError("Error saving entry");
+                return INPUT;
             }
-        }
-        if ("entryAdd".equals(actionName)) {
-            // if here on entryAdd, nothing saved, so reset status to null (unsaved)
-            getBean().setStatus(null);
         }
         return INPUT;
     }
